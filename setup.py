@@ -160,20 +160,19 @@ def make_setup(**opts):
 
 
 ext_list = [
-    "polemarch.api.v1.filters",
-    "polemarch.api.v1.serializers",
-    "polemarch.api.v1.views",
-    "polemarch.api.base",
-    "polemarch.api.handlers",
-    "polemarch.api.permissions",
+    "polemarch.api.v2.filters",
+    "polemarch.api.v2.permissions",
+    "polemarch.api.v2.serializers",
+    "polemarch.api.v2.swagger",
+    "polemarch.api.v2.views",
     "polemarch.api.signals",
     "polemarch.main.models.base",
-    "polemarch.main.models.hosts",
     "polemarch.main.models.hooks",
+    "polemarch.main.models.hosts",
     "polemarch.main.models.projects",
     "polemarch.main.models.tasks",
-    "polemarch.main.models.utils",
     "polemarch.main.models.users",
+    "polemarch.main.models.utils",
     "polemarch.main.models.vars",
     "polemarch.main.templatetags.inventories",
     'polemarch.main.settings',
@@ -194,8 +193,8 @@ kwargs = dict(
     name='polemarch',
     ext_modules_list=ext_list,
     include_package_data=True,
+    python_requires=">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*, !=3.4.*",
     install_requires=[
-        'vstcompile[doc]',
     ] +
     load_requirements('requirements.txt', os.getcwd()) +
     load_requirements('requirements-doc.txt', os.getcwd()),

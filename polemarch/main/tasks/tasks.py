@@ -1,18 +1,19 @@
 # pylint: disable=broad-except,no-member,redefined-outer-name
 import logging
 import traceback
-
+from django.conf import settings
 from ...wapp import app
 from ..utils import task, BaseTask
 from .exceptions import TaskError
 from ..models.utils import AnsibleModule, AnsiblePlaybook
 
 logger = logging.getLogger("polemarch")
+clone_retry = getattr(settings, 'CLONE_RETRY', 5)
 
 
-@task(app, ignore_result=True, default_retry_delay=1,
-      max_retries=5, bind=True)
+@task(app, ignore_result=True, default_retry_delay=1, max_retries=clone_retry, bind=True)
 class RepoTask(BaseTask):
+    __slots__ = 'project', 'operation'
     accepted_operations = ["clone", "sync"]
 
     class RepoTaskError(TaskError):
@@ -30,13 +31,15 @@ class RepoTask(BaseTask):
     def run(self):
         try:
             result = getattr(self.project, self.operation)()
-            logger.info(result)
+            logger.debug(result)
         except Exception as error:
             self.app.retry(exc=error)
 
 
 @task(app, ignore_result=True, bind=True)
 class ScheduledTask(BaseTask):
+    __slots__ = 'job_id',
+
     def __init__(self, app, job_id, *args, **kwargs):
         super(self.__class__, self).__init__(app, *args, **kwargs)
         self.job_id = job_id

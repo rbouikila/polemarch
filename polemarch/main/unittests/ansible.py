@@ -1,34 +1,115 @@
+import six
 from django.test import TestCase
+from django.core.management import call_command
+from ..utils import AnsibleInventoryParser
 
-from ..utils import AnsibleArgumentsReference, AnsibleModules
+inventory_data = '''
+test-host-single ansible_host=10.10.10.10
+
+[test-group]
+test-host ansible_host=10.10.10.20
+
+[test-group:vars]
+ansible_user=ubuntu
+ansible_ssh_private_key_file=example-key
+
+[child-group]
+test-host-2
+
+[parent-group:children]
+child-group
+
+[all:vars]
+ansible_connection=ssh
+'''
+valid_inventory = {
+    'groups': {
+        'test-group': {
+            'name': 'test-group',
+            'groups': [],
+            'hosts': ['test-host'],
+            'vars': {
+                'ansible_user': 'ubuntu',
+                'ansible_ssh_private_key_file': 'example-key',
+            },
+        },
+        'child-group': {
+            'name': 'child-group',
+            'groups': [],
+            'hosts': ['test-host-2'],
+            'vars': {},
+        },
+        'parent-group': {
+            'name': 'parent-group',
+            'groups': ['child-group'],
+            'hosts': [],
+            'vars': {},
+        },
+    },
+    'hosts': {
+        'test-host-single': {
+            'name': 'test-host-single',
+            'vars': {
+                'ansible_host': '10.10.10.10',
+            }
+        },
+        'test-host': {
+            'name': 'test-host',
+            'vars': {
+                'ansible_host': '10.10.10.20',
+            }
+        },
+        'test-host-2': {
+            'name': 'test-host-2',
+            'vars': {}
+        }
+    },
+    'vars': {
+        'ansible_connection': 'ssh',
+    },
+}
 
 
 class AnsibleTestCase(TestCase):
-    def _is_exists(self, ref, key):
-        return any([True for args in ref.raw_dict.values() if key in args])
+    def test_modules(self):
+        out = six.StringIO()
+        call_command('update_ansible_modules', interactive=False, stdout=out)
+        self.assertEqual(
+            'The modules have been successfully updated.\n',
+            out.getvalue().replace('\x1b[32;1m', '').replace('\x1b[0m', '')
+        )
 
-    def test_rules(self):
-        # pylint: disable=protected-access,
-        reference = AnsibleArgumentsReference()
-        for rule in AnsibleArgumentsReference._GUI_TYPES_CONVERSION_DIFFERENT:
-            self.assertTrue(self._is_exists(reference, rule))
-        self.assertTrue(not self._is_exists(reference, "error_case"))
+    def test_inventory_parser(self):
+        parser = AnsibleInventoryParser()
+        inv_json = parser.get_inventory_data(inventory_data)
+        for record in inv_json['groups']:
+            self.assertIn(record['name'], valid_inventory['groups'].keys())
+            self.assertEqual(
+                list(valid_inventory['groups'][record['name']]['hosts']),
+                list(record['hosts'])
+            )
+            self.assertEqual(
+                list(valid_inventory['groups'][record['name']]['groups']),
+                list(record['groups'])
+            )
+            self.assertEqual(
+                list(valid_inventory['groups'][record['name']]['vars'].keys()),
+                list(record['vars'].keys())
+            )
+            for key, value in valid_inventory['groups'][record['name']]['vars'].items():
+                self.assertEqual(record['vars'][key], value)
+        for record in inv_json['hosts']:
+            self.assertIn(record['name'], valid_inventory['hosts'].keys())
+            self.assertEqual(
+                list(valid_inventory['hosts'][record['name']]['vars'].keys()),
+                list(record['vars'].keys())
+            )
+            for key, value in valid_inventory['hosts'][record['name']]['vars'].items():
+                self.assertEqual(record['vars'][key], value)
 
-    def test_ansible_modules(self):
-        mods = AnsibleModules()
-        s1 = mods.get("cloud.ama*")
-        s2 = mods.get("^cloud.*")
-        s3 = mods.get("cloud.amazon")
-        s4 = mods.all()
-        s5 = mods.get(r"^(?!cloud).")
-        s6 = list(set(s4) - set(s5))  # Diff between s4 and s5
-        s7 = [v for v in s2 if v not in s6]  # Diff between s6 and s2
-        self.assertEqual(s1, s3)
-        self.assertNotEqual(s2, s1)
-        self.assertEqual(len(s7), 0, s7)
-
-        mods = AnsibleModules(detailed=True, fields="module,short_description")
-        shell_module = mods.get("commands.shell")[0]
-        self.assertEqual(shell_module['data']['module'], "shell", shell_module)
-        self.assertEqual(shell_module['data']['short_description'],
-                         "Execute commands in nodes.", shell_module)
+        self.assertEqual(
+            list(valid_inventory['vars'].keys()),
+            list(inv_json['vars'].keys())
+        )
+        for key, value in valid_inventory['vars'].items():
+            self.assertEqual(inv_json['vars'][key], value)
